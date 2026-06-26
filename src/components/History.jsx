@@ -1,0 +1,38 @@
+import { useState, useEffect } from 'react'
+import { supabase } from '../supabase'
+
+export default function History() {
+  const [history, setHistory] = useState([])
+
+  useEffect(() => { fetchHistory() }, [])
+
+  async function fetchHistory() {
+    const { data } = await supabase.from('history').select('*').order('created_at', { ascending: false }).limit(50)
+    if (data) setHistory(data)
+  }
+
+  const samCount = history.filter(h => h.who === 'Sam').length
+  const wifeCount = history.filter(h => h.who === 'Wife').length
+
+  return (
+    <div>
+      <div className="stats-grid">
+        <div className="stat"><div className="stat-label">Sam completed</div><div className="stat-val">{samCount}</div></div>
+        <div className="stat"><div className="stat-label">Wife completed</div><div className="stat-val">{wifeCount}</div></div>
+        <div className="stat"><div className="stat-label">Total</div><div className="stat-val">{history.length}</div></div>
+      </div>
+
+      <div className="section-header"><h2>Completion log</h2></div>
+
+      {history.map(h => (
+        <div key={h.id} className="history-row">
+          <span className="history-who" style={{color: h.who === 'Sam' ? '#185FA5' : '#993556'}}>{h.who}</span>
+          <span className="history-task">{h.task_name}</span>
+          <span className="history-when">{new Date(h.created_at).toLocaleDateString()}</span>
+        </div>
+      ))}
+
+      {!history.length && <div className="empty">Nothing completed yet.</div>}
+    </div>
+  )
+}
