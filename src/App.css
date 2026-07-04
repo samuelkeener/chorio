@@ -64,8 +64,10 @@ body {
 
 .add-row {
   display: flex;
+  align-items: center;
   gap: 8px;
   margin-bottom: 1rem;
+  flex-wrap: wrap;
 }
 
 .add-row input, .add-row select {
@@ -76,6 +78,14 @@ body {
 }
 
 .add-row input { flex: 1; }
+
+.interval-label { font-size: 14px; color: #595959; white-space: nowrap; }
+
+.add-row input.interval-count {
+  flex: none;
+  width: 56px;
+  text-align: center;
+}
 
 button {
   padding: 7px 14px;
@@ -108,6 +118,13 @@ button:hover { background: #f5f5f5; }
   gap: 10px;
   padding: 10px 0;
   border-bottom: 1px solid #f0f0f0;
+}
+
+.chore-row {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border-bottom: none;
+  margin-bottom: 6px;
 }
 
 .check {
