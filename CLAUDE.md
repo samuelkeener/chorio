@@ -26,7 +26,8 @@ Stack: React 19 + Vite + `@supabase/supabase-js`, deployed to a URL that auto-de
   - Baseline is `last_done_at`, or `created_at` if never done (so new chores start green, not red)
   - Thresholds scale with the chore's own interval: yellow at `ceil(interval_days / 6)` days overdue, red at double that — this reproduces the originally-specified Daily (+1/+2 days), Weekly (+2/+4), Monthly (+5/+10) targets exactly, and extends the same formula to Biweekly and Custom
   - Colors interpolate smoothly between green/yellow/red rather than jumping in discrete steps
-  - Daily/Weekly/Monthly chores can optionally get a **manual recurring deadline** (added 2026-07-08): a time-of-day for Daily, a day-of-week + optional time for Weekly, a day-of-month + optional time for Monthly (`deadline_time`/`deadline_weekday`/`deadline_day_of_month` columns). This is a fixed schedule computed fresh each render (e.g. "every Sunday at 6pm forever"), not a stored date that shifts — completing the chore early doesn't pull the next deadline forward. When set, it fully replaces the last-done-relative color calculation for that chore. Set/edited via an inline per-row editor (click "Set deadline"/"Edit deadline" in the chore's meta row), not just at creation time.
+  - Daily/Weekly/Monthly **and Custom** chores can optionally get a **manual recurring deadline** (Daily/Weekly/Monthly added 2026-07-08, Custom added same day): a time-of-day for Daily, a day-of-week + optional time for Weekly, a day-of-month + optional time for Monthly (`deadline_time`/`deadline_weekday`/`deadline_day_of_month` columns), or an arbitrary anchor date+time for Custom (`deadline_anchor`, repeats every N days/weeks/months from that anchor). This is a fixed schedule computed fresh each render (e.g. "every Sunday at 6pm forever", or "every 5 days from June 20"), not a stored date that shifts — completing the chore early doesn't pull the next deadline forward. When set, it fully replaces the last-done-relative color calculation for that chore. Set/edited via an inline per-row editor (click "Set deadline"/"Edit deadline" in the chore's meta row), not just at creation time. A fresh chore is never judged against a scheduled occurrence that predates its own `created_at`.
+  - `last_done_at` can be manually edited/backdated per chore (added 2026-07-08) via an "Edit timestamp" link next to "Last done: ..." — same inline-editor pattern as the deadline editor. Does not touch the `history` table (no link between history rows and the chore that generated them).
 - **Shopping tab**: categorized list, add/check/delete/clear-checked
 - **History tab**: completion log + per-person completed counts (Sam/Anne)
 
@@ -35,7 +36,7 @@ Stack: React 19 + Vite + `@supabase/supabase-js`, deployed to a URL that auto-de
 ## Roadmap (priority order, as of 2026-07-04)
 
 1. Points system for completing chores
-2. Ability to manually change/backdate the timestamp of a completed chore
+2. ~~Ability to manually change/backdate the timestamp of a completed chore~~ — done 2026-07-08
 3. User-created custom tabs/categories of tasks with their own deadlines
 4. "Skip chore today" — removes it from today's view without touching `last_done_by`/`last_done_at`
 

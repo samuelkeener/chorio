@@ -92,6 +92,11 @@ body {
   width: 110px;
 }
 
+.add-row input[type="datetime-local"] {
+  flex: none;
+  width: 200px;
+}
+
 .deadline-row {
   margin-top: -0.5rem;
 }

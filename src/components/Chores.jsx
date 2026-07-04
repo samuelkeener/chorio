@@ -2,11 +2,17 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+const DEADLINE_FREQUENCIES = ['Daily', 'Weekly', 'Monthly', 'Custom']
 
 function formatInterval(chore) {
   if (!chore.interval_count || !chore.interval_unit) return ''
   const plural = chore.interval_count === 1 ? '' : 's'
   return `Every ${chore.interval_count} ${chore.interval_unit}${plural}`
+}
+
+function formatDateTime(iso) {
+  const d = new Date(iso)
+  return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
 }
 
 // Does this chore have a manually-set recurring deadline (as opposed to being tracked
@@ -15,6 +21,7 @@ function hasDeadline(chore) {
   if (chore.frequency === 'Daily') return !!chore.deadline_time
   if (chore.frequency === 'Weekly') return chore.deadline_weekday !== null && chore.deadline_weekday !== undefined
   if (chore.frequency === 'Monthly') return chore.deadline_day_of_month !== null && chore.deadline_day_of_month !== undefined
+  if (chore.frequency === 'Custom') return !!chore.deadline_anchor
   return false
 }
 
@@ -24,6 +31,11 @@ function formatDeadline(chore) {
   if (chore.frequency === 'Daily') return `Due daily${timeSuffix}`
   if (chore.frequency === 'Weekly') return `Due ${WEEKDAYS[chore.deadline_weekday]}s${timeSuffix}`
   if (chore.frequency === 'Monthly') return `Due on the ${ordinal(chore.deadline_day_of_month)}${timeSuffix}`
+  if (chore.frequency === 'Custom' && chore.deadline_anchor) {
+    const recent = mostRecentDeadlineOccurrence(chore, new Date())
+    const next = new Date(recent.getTime() + intervalDays(chore) * 24 * 60 * 60 * 1000)
+    return `Next due: ${formatDateTime(next)}`
+  }
   return ''
 }
 
@@ -40,8 +52,17 @@ function ordinal(n) {
   return n + (s[(v - 20) % 10] || s[v] || s[0])
 }
 
+// Convert an ISO timestamp to the local "YYYY-MM-DDTHH:MM" string a datetime-local input expects.
+function toDatetimeLocal(isoString) {
+  const d = isoString ? new Date(isoString) : new Date()
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 // The most recent occurrence of a chore's fixed schedule that has already happened
 // (e.g. "this past Sunday", or "today" / "yesterday" for a daily time-of-day deadline).
+// For Custom chores, the schedule is anchored to an arbitrary date/time and repeats every
+// interval from there, rather than snapping to a fixed weekday/day-of-month.
 function mostRecentDeadlineOccurrence(chore, now) {
   const [h, m] = (chore.deadline_time || '23:59').split(':').map(Number)
 
@@ -70,6 +91,15 @@ function mostRecentDeadlineOccurrence(chore, now) {
     const thisMonth = dayInMonth(now.getFullYear(), now.getMonth())
     if (thisMonth <= now) return thisMonth
     return dayInMonth(now.getFullYear(), now.getMonth() - 1)
+  }
+
+  if (chore.frequency === 'Custom' && chore.deadline_anchor) {
+    const anchor = new Date(chore.deadline_anchor)
+    const intervalMs = intervalDays(chore) * 24 * 60 * 60 * 1000
+    const elapsed = now - anchor
+    if (elapsed < 0) return anchor
+    const cycles = Math.floor(elapsed / intervalMs)
+    return new Date(anchor.getTime() + cycles * intervalMs)
   }
 
   return null
@@ -139,6 +169,7 @@ function blankDeadlineDraft(chore) {
     time: chore?.deadline_time || '',
     weekday: chore?.deadline_weekday ?? 0,
     dayOfMonth: chore?.deadline_day_of_month ?? 1,
+    anchor: toDatetimeLocal(chore?.deadline_anchor),
   }
 }
 
@@ -153,6 +184,8 @@ export default function Chores({ user }) {
   const [deadlineDraft, setDeadlineDraft] = useState(blankDeadlineDraft())
   const [editingDeadlineId, setEditingDeadlineId] = useState(null)
   const [editDraft, setEditDraft] = useState(blankDeadlineDraft())
+  const [editingTimestampId, setEditingTimestampId] = useState(null)
+  const [timestampDraft, setTimestampDraft] = useState('')
 
   useEffect(() => { fetchChores() }, [])
 
@@ -167,8 +200,7 @@ export default function Chores({ user }) {
     const count = parseInt(intervalCount, 10)
     if (isCustom && (!count || count < 1)) return
 
-    const canHaveDeadline = ['Daily', 'Weekly', 'Monthly'].includes(frequency)
-    const useDeadline = canHaveDeadline && deadlineEnabled
+    const useDeadline = DEADLINE_FREQUENCIES.includes(frequency) && deadlineEnabled
 
     await supabase.from('chores').insert({
       name: newChore,
@@ -176,9 +208,10 @@ export default function Chores({ user }) {
       frequency,
       interval_count: isCustom ? count : null,
       interval_unit: isCustom ? intervalUnit : null,
-      deadline_time: useDeadline ? (deadlineDraft.time || null) : null,
+      deadline_time: useDeadline && frequency !== 'Custom' ? (deadlineDraft.time || null) : null,
       deadline_weekday: useDeadline && frequency === 'Weekly' ? deadlineDraft.weekday : null,
       deadline_day_of_month: useDeadline && frequency === 'Monthly' ? deadlineDraft.dayOfMonth : null,
+      deadline_anchor: useDeadline && frequency === 'Custom' ? new Date(deadlineDraft.anchor).toISOString() : null,
     })
     setNewChore('')
     setDeadlineEnabled(false)
@@ -202,11 +235,24 @@ export default function Chores({ user }) {
     setEditDraft(blankDeadlineDraft(chore))
   }
 
+  function startEditingTimestamp(chore) {
+    setEditingTimestampId(chore.id)
+    setTimestampDraft(toDatetimeLocal(chore.last_done_at))
+  }
+
+  async function saveTimestamp(chore) {
+    if (!timestampDraft) return
+    await supabase.from('chores').update({ last_done_at: new Date(timestampDraft).toISOString() }).eq('id', chore.id)
+    setEditingTimestampId(null)
+    fetchChores()
+  }
+
   async function saveDeadline(chore) {
     await supabase.from('chores').update({
-      deadline_time: editDraft.time || null,
+      deadline_time: chore.frequency !== 'Custom' ? (editDraft.time || null) : null,
       deadline_weekday: chore.frequency === 'Weekly' ? editDraft.weekday : null,
       deadline_day_of_month: chore.frequency === 'Monthly' ? editDraft.dayOfMonth : null,
+      deadline_anchor: chore.frequency === 'Custom' ? new Date(editDraft.anchor).toISOString() : null,
     }).eq('id', chore.id)
     setEditingDeadlineId(null)
     fetchChores()
@@ -217,13 +263,14 @@ export default function Chores({ user }) {
       deadline_time: null,
       deadline_weekday: null,
       deadline_day_of_month: null,
+      deadline_anchor: null,
     }).eq('id', chore.id)
     setEditingDeadlineId(null)
     fetchChores()
   }
 
   const groups = ['Daily', 'Weekly', 'Biweekly', 'Monthly', 'Custom']
-  const canHaveDeadline = ['Daily', 'Weekly', 'Monthly'].includes(frequency)
+  const canHaveDeadline = DEADLINE_FREQUENCIES.includes(frequency)
 
   return (
     <div>
@@ -278,11 +325,18 @@ export default function Chores({ user }) {
               {Array.from({ length: 31 }, (_, i) => i + 1).map(day => <option key={day} value={day}>{ordinal(day)}</option>)}
             </select>
           )}
-          {deadlineEnabled && (
+          {deadlineEnabled && frequency !== 'Custom' && (
             <input
               type="time"
               value={deadlineDraft.time}
               onChange={e => setDeadlineDraft({ ...deadlineDraft, time: e.target.value })}
+            />
+          )}
+          {deadlineEnabled && frequency === 'Custom' && (
+            <input
+              type="datetime-local"
+              value={deadlineDraft.anchor}
+              onChange={e => setDeadlineDraft({ ...deadlineDraft, anchor: e.target.value })}
             />
           )}
         </div>
@@ -302,14 +356,24 @@ export default function Chores({ user }) {
                   <div className="task-meta">
                     <span className={`badge badge-${chore.assigned_to.toLowerCase()}`}>{chore.assigned_to}</span>
                     {freq === 'Custom' && <span>{formatInterval(chore)}</span>}
-                    <span>{chore.last_done_at ? 'Last done: ' + new Date(chore.last_done_at).toLocaleDateString() : 'Never done'}</span>
+                    <span>{chore.last_done_at ? 'Last done: ' + formatDateTime(chore.last_done_at) : 'Never done'}</span>
+                    {chore.last_done_at && editingTimestampId !== chore.id && (
+                      <span className="deadline-edit-link" onClick={() => startEditingTimestamp(chore)}>Edit timestamp</span>
+                    )}
                     {hasDeadline(chore) && <span>{formatDeadline(chore)}</span>}
-                    {['Daily', 'Weekly', 'Monthly'].includes(freq) && editingDeadlineId !== chore.id && (
+                    {DEADLINE_FREQUENCIES.includes(freq) && editingDeadlineId !== chore.id && (
                       <span className="deadline-edit-link" onClick={() => startEditingDeadline(chore)}>
                         {hasDeadline(chore) ? 'Edit deadline' : 'Set deadline'}
                       </span>
                     )}
                   </div>
+                  {editingTimestampId === chore.id && (
+                    <div className="deadline-editor">
+                      <input type="datetime-local" value={timestampDraft} onChange={e => setTimestampDraft(e.target.value)} />
+                      <button onClick={() => saveTimestamp(chore)}>Save</button>
+                      <button onClick={() => setEditingTimestampId(null)}>Cancel</button>
+                    </div>
+                  )}
                   {editingDeadlineId === chore.id && (
                     <div className="deadline-editor">
                       {chore.frequency === 'Weekly' && (
@@ -322,7 +386,12 @@ export default function Chores({ user }) {
                           {Array.from({ length: 31 }, (_, i) => i + 1).map(day => <option key={day} value={day}>{ordinal(day)}</option>)}
                         </select>
                       )}
-                      <input type="time" value={editDraft.time} onChange={e => setEditDraft({ ...editDraft, time: e.target.value })} />
+                      {chore.frequency !== 'Custom' && (
+                        <input type="time" value={editDraft.time} onChange={e => setEditDraft({ ...editDraft, time: e.target.value })} />
+                      )}
+                      {chore.frequency === 'Custom' && (
+                        <input type="datetime-local" value={editDraft.anchor} onChange={e => setEditDraft({ ...editDraft, anchor: e.target.value })} />
+                      )}
                       <button onClick={() => saveDeadline(chore)}>Save</button>
                       {hasDeadline(chore) && <button onClick={() => clearDeadline(chore)}>Clear</button>}
                       <button onClick={() => setEditingDeadlineId(null)}>Cancel</button>
