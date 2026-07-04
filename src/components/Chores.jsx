@@ -42,7 +42,7 @@ export default function Chores({ user }) {
         <input value={newChore} onChange={e => setNewChore(e.target.value)} onKeyDown={e => e.key === 'Enter' && addChore()} placeholder="New chore..." />
         <select value={assignTo} onChange={e => setAssignTo(e.target.value)}>
           <option>Sam</option>
-          <option>Wife</option>
+          <option>Anne</option>
           <option>Both</option>
         </select>
         <select value={frequency} onChange={e => setFrequency(e.target.value)}>

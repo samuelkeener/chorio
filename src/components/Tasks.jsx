@@ -1,6 +1,14 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 
+function formatCompletedAt(timestamp) {
+  if (!timestamp) return ''
+  const d = new Date(timestamp)
+  const date = d.toLocaleDateString()
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  return `${date} ${time}`
+}
+
 export default function Tasks({ user }) {
   const [tasks, setTasks] = useState([])
   const [newTask, setNewTask] = useState('')
@@ -50,7 +58,7 @@ export default function Tasks({ user }) {
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 1000,
-        system: `You are a helpful household assistant for Sam and his wife (who just had a baby). Be warm and concise — 2-4 sentences. Open tasks: ${open || 'none'}. Current user: ${user}.`,
+        system: `You are a helpful household assistant for Sam and Anne (who just had a baby). Be warm and concise — 2-4 sentences. Open tasks: ${open || 'none'}. Current user: ${user}.`,
         messages: [{ role: 'user', content: aiInput }]
       })
     })
@@ -86,7 +94,7 @@ export default function Tasks({ user }) {
         <input value={newTask} onChange={e => setNewTask(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTask()} placeholder="New task..." />
         <select value={assignTo} onChange={e => setAssignTo(e.target.value)}>
           <option>Sam</option>
-          <option>Wife</option>
+          <option>Anne</option>
           <option>Both</option>
         </select>
         <button onClick={addTask}>Add</button>
@@ -105,7 +113,9 @@ export default function Tasks({ user }) {
             <div className={`task-name ${task.done ? 'done' : ''}`}>{task.name}</div>
             <div className="task-meta">
               <span className={`badge badge-${task.assigned_to.toLowerCase()}`}>{task.assigned_to}</span>
-              {task.done && task.completed_by && <span>Done by {task.completed_by}</span>}
+              {task.done && task.completed_by && (
+                <span>Done by {task.completed_by} {formatCompletedAt(task.completed_at)}</span>
+              )}
             </div>
           </div>
           <button className="delete-btn" onClick={() => deleteTask(task.id)}>✕</button>

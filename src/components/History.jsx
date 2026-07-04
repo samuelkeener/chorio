@@ -12,13 +12,13 @@ export default function History() {
   }
 
   const samCount = history.filter(h => h.who === 'Sam').length
-  const wifeCount = history.filter(h => h.who === 'Wife').length
+  const anneCount = history.filter(h => h.who === 'Anne').length
 
   return (
     <div>
       <div className="stats-grid">
         <div className="stat"><div className="stat-label">Sam completed</div><div className="stat-val">{samCount}</div></div>
-        <div className="stat"><div className="stat-label">Wife completed</div><div className="stat-val">{wifeCount}</div></div>
+        <div className="stat"><div className="stat-label">Anne completed</div><div className="stat-val">{anneCount}</div></div>
         <div className="stat"><div className="stat-label">Total</div><div className="stat-val">{history.length}</div></div>
       </div>
 

@@ -16,7 +16,7 @@ export default function App() {
         <h1>Home hub</h1>
         <div className="person-toggle">
           <button className={user === 'Sam' ? 'pill sam active' : 'pill sam'} onClick={() => setUser('Sam')}>Sam</button>
-          <button className={user === 'Wife' ? 'pill wife active' : 'pill wife'} onClick={() => setUser('Wife')}>Wife</button>
+          <button className={user === 'Anne' ? 'pill anne active' : 'pill anne'} onClick={() => setUser('Anne')}>Anne</button>
         </div>
       </div>
 
