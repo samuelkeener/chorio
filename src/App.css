@@ -253,6 +253,23 @@ button:hover { background: #f5f5f5; }
   border: 1px solid #ddd;
 }
 
+.category-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+  background: #f0f0f0;
+  color: #595959;
+}
+
+.category-input {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  border: 1px solid #185FA5;
+  width: 110px;
+}
+
 .delete-btn {
   color: #999;
   border: none;
@@ -315,15 +332,5 @@ button:hover { background: #f5f5f5; }
 .history-who { font-weight: 500; min-width: 60px; }
 .history-task { flex: 1; color: #595959; }
 .history-when { color: #767676; font-size: 12px; }
-
-.ai-panel {
-  background: #f8f8f8;
-  border-radius: 12px;
-  padding: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.ai-header { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
-.ai-response { margin-top: 10px; font-size: 13px; color: #555; line-height: 1.6; }
 
 .empty { text-align: center; padding: 2rem 0; color: #767676; font-size: 14px; }
