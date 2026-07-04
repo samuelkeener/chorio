@@ -200,6 +200,10 @@ export default function Tasks({ user }) {
         <h2>Tasks</h2>
       </div>
 
+      <datalist id="category-options">
+        {categories.map(cat => <option key={cat} value={cat} />)}
+      </datalist>
+
       <div className="add-row">
         <input value={newTask} onChange={e => setNewTask(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTask()} placeholder="New task..." />
         <select value={assignTo} onChange={e => setAssignTo(e.target.value)}>
@@ -292,6 +296,7 @@ export default function Tasks({ user }) {
                         value={categoryDraft}
                         autoFocus
                         placeholder="Category..."
+                        list="category-options"
                         onChange={e => setCategoryDraft(e.target.value)}
                         onKeyDown={e => {
                           if (e.key === 'Enter') saveCategory(item)
