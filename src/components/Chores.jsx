@@ -36,6 +36,8 @@ export default function Chores({ user }) {
   const [editingTimestampId, setEditingTimestampId] = useState(null)
   const [timestampDraft, setTimestampDraft] = useState('')
   const [whoFilter, setWhoFilter] = useState('All')
+  const [editingNameId, setEditingNameId] = useState(null)
+  const [nameDraft, setNameDraft] = useState('')
 
   useEffect(() => { fetchChores() }, [])
 
@@ -77,6 +79,19 @@ export default function Chores({ user }) {
 
   async function deleteChore(id) {
     await supabase.from('chores').delete().eq('id', id)
+    fetchChores()
+  }
+
+  function startEditingName(chore) {
+    setEditingNameId(chore.id)
+    setNameDraft(chore.name)
+  }
+
+  async function saveName(chore) {
+    const trimmed = nameDraft.trim()
+    setEditingNameId(null)
+    if (!trimmed || trimmed === chore.name) return
+    await supabase.from('chores').update({ name: trimmed }).eq('id', chore.id)
     fetchChores()
   }
 
@@ -214,7 +229,21 @@ export default function Chores({ user }) {
               <div key={chore.id} className="task-row chore-row" style={{ backgroundColor: choreColor(chore) }}>
                 <div className="check" onClick={() => markDone(chore)} />
                 <div className="task-info">
-                  <div className="task-name">{chore.name}</div>
+                  {editingNameId === chore.id ? (
+                    <input
+                      className="task-name-input"
+                      value={nameDraft}
+                      autoFocus
+                      onChange={e => setNameDraft(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') saveName(chore)
+                        if (e.key === 'Escape') setEditingNameId(null)
+                      }}
+                      onBlur={() => saveName(chore)}
+                    />
+                  ) : (
+                    <div className="task-name editable-name" onClick={() => startEditingName(chore)}>{chore.name}</div>
+                  )}
                   <div className="task-meta">
                     <span className={`badge badge-${chore.assigned_to.toLowerCase()}`}>{chore.assigned_to}</span>
                     {freq === 'Custom' && <span>{formatInterval(chore)}</span>}
