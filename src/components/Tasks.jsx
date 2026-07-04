@@ -81,6 +81,7 @@ export default function Tasks({ user }) {
   const [editingAssigneeKey, setEditingAssigneeKey] = useState(null)
   const [editingCategoryKey, setEditingCategoryKey] = useState(null)
   const [categoryDraft, setCategoryDraft] = useState('')
+  const [categoryTouched, setCategoryTouched] = useState(false)
 
   useEffect(() => { fetchTasks(); fetchChores() }, [])
 
@@ -150,12 +151,18 @@ export default function Tasks({ user }) {
 
   function startEditingCategory(item) {
     setEditingCategoryKey(item.key)
-    setCategoryDraft(item.category || '')
+    // Start empty (not pre-filled with the current category) so the dropdown of every
+    // existing category shows in full immediately, instead of Chrome filtering the
+    // datalist suggestions down to matches of whatever text is already in the field.
+    setCategoryDraft('')
+    setCategoryTouched(false)
   }
 
   async function saveCategory(item) {
-    const trimmed = categoryDraft.trim()
     setEditingCategoryKey(null)
+    // Untouched (just clicked in and clicked away again) should never clear an existing category.
+    if (!categoryTouched) return
+    const trimmed = categoryDraft.trim()
     if (trimmed === (item.category || '')) return
     await supabase.from('tasks').update({ category: trimmed || null }).eq('id', item.id)
     fetchTasks()
@@ -295,9 +302,9 @@ export default function Tasks({ user }) {
                         className="category-input"
                         value={categoryDraft}
                         autoFocus
-                        placeholder="Category..."
+                        placeholder={item.category || 'Category...'}
                         list="category-options"
-                        onChange={e => setCategoryDraft(e.target.value)}
+                        onChange={e => { setCategoryDraft(e.target.value); setCategoryTouched(true) }}
                         onKeyDown={e => {
                           if (e.key === 'Enter') saveCategory(item)
                           if (e.key === 'Escape') setEditingCategoryKey(null)
