@@ -6,6 +6,7 @@ body {
   margin: 0 auto;
   padding: 1rem;
   color: #1a1a1a;
+  background: #ffffff;
 }
 
 .header {
@@ -43,7 +44,7 @@ body {
   padding: 8px 16px;
   font-size: 14px;
   cursor: pointer;
-  color: #888;
+  color: #595959;
   border: none;
   background: none;
   border-bottom: 2px solid transparent;
@@ -123,13 +124,13 @@ button:hover { background: #f5f5f5; }
 .task-info { flex: 1; }
 
 .task-name { font-size: 14px; }
-.task-name.done { text-decoration: line-through; color: #aaa; }
+.task-name.done { text-decoration: line-through; color: #999; }
 
 .task-meta {
   display: flex;
   gap: 8px;
   font-size: 12px;
-  color: #888;
+  color: #595959;
   margin-top: 2px;
 }
 
@@ -145,7 +146,7 @@ button:hover { background: #f5f5f5; }
 .badge-both { background: #EAF3DE; color: #27500A; }
 
 .delete-btn {
-  color: #ccc;
+  color: #999;
   border: none;
   background: none;
   font-size: 14px;
@@ -153,14 +154,14 @@ button:hover { background: #f5f5f5; }
   padding: 4px;
 }
 
-.delete-btn:hover { color: #999; background: none; }
+.delete-btn:hover { color: #555; background: none; }
 
 .chore-group { margin-bottom: 1.5rem; }
 
 .chore-group-label {
   font-size: 12px;
   font-weight: 500;
-  color: #888;
+  color: #595959;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: 8px;
@@ -175,8 +176,8 @@ button:hover { background: #f5f5f5; }
 }
 
 .shop-label { flex: 1; font-size: 14px; }
-.shop-label.checked { text-decoration: line-through; color: #aaa; }
-.shop-cat { font-size: 12px; color: #aaa; }
+.shop-label.checked { text-decoration: line-through; color: #999; }
+.shop-cat { font-size: 12px; color: #767676; }
 
 .stats-grid {
   display: grid;
@@ -191,7 +192,7 @@ button:hover { background: #f5f5f5; }
   padding: 12px 14px;
 }
 
-.stat-label { font-size: 12px; color: #888; margin-bottom: 4px; }
+.stat-label { font-size: 12px; color: #595959; margin-bottom: 4px; }
 .stat-val { font-size: 22px; font-weight: 500; }
 
 .history-row {
@@ -204,8 +205,8 @@ button:hover { background: #f5f5f5; }
 }
 
 .history-who { font-weight: 500; min-width: 60px; }
-.history-task { flex: 1; color: #666; }
-.history-when { color: #aaa; font-size: 12px; }
+.history-task { flex: 1; color: #595959; }
+.history-when { color: #767676; font-size: 12px; }
 
 .ai-panel {
   background: #f8f8f8;
@@ -217,4 +218,4 @@ button:hover { background: #f5f5f5; }
 .ai-header { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
 .ai-response { margin-top: 10px; font-size: 13px; color: #555; line-height: 1.6; }
 
-.empty { text-align: center; padding: 2rem 0; color: #aaa; font-size: 14px; }
+.empty { text-align: center; padding: 2rem 0; color: #767676; font-size: 14px; }
