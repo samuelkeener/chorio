@@ -186,6 +186,7 @@ export default function Chores({ user }) {
   const [editDraft, setEditDraft] = useState(blankDeadlineDraft())
   const [editingTimestampId, setEditingTimestampId] = useState(null)
   const [timestampDraft, setTimestampDraft] = useState('')
+  const [whoFilter, setWhoFilter] = useState('All')
 
   useEffect(() => { fetchChores() }, [])
 
@@ -342,8 +343,20 @@ export default function Chores({ user }) {
         </div>
       )}
 
+      <div className="filter-row">
+        {['All', 'Sam', 'Anne'].map(who => (
+          <button
+            key={who}
+            className={whoFilter === who ? 'filter-pill active' : 'filter-pill'}
+            onClick={() => setWhoFilter(who)}
+          >
+            {who}
+          </button>
+        ))}
+      </div>
+
       {groups.map(freq => {
-        const items = chores.filter(c => c.frequency === freq)
+        const items = chores.filter(c => c.frequency === freq && (whoFilter === 'All' || c.assigned_to === whoFilter || c.assigned_to === 'Both'))
         if (!items.length) return null
         return (
           <div key={freq} className="chore-group">
