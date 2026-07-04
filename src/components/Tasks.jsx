@@ -70,6 +70,7 @@ export default function Tasks({ user }) {
   const [newTask, setNewTask] = useState('')
   const [assignTo, setAssignTo] = useState('Sam')
   const [filter, setFilter] = useState('all')
+  const [showDone, setShowDone] = useState(true)
   const [aiInput, setAiInput] = useState('')
   const [aiResponse, setAiResponse] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
@@ -146,7 +147,7 @@ export default function Tasks({ user }) {
     return true
   })
 
-  const sections = SECTIONS.map(name => {
+  const sections = SECTIONS.filter(name => name !== 'Done' || showDone).map(name => {
     const sectionItems = items.filter(item => bucketOf(item, now) === name)
     sectionItems.sort((a, b) => {
       if (name === 'Done') return new Date(b.doneAt || 0) - new Date(a.doneAt || 0)
@@ -186,6 +187,9 @@ export default function Tasks({ user }) {
         {['all','mine','open','done'].map(f => (
           <button key={f} className={filter === f ? 'filter-pill active' : 'filter-pill'} onClick={() => setFilter(f)}>{f}</button>
         ))}
+        <label className="interval-label show-done-toggle">
+          <input type="checkbox" checked={showDone} onChange={e => setShowDone(e.target.checked)} /> Show done
+        </label>
       </div>
 
       {sections.map(section => (

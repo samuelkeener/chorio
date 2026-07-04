@@ -139,7 +139,15 @@ button {
 
 button:hover { background: #f5f5f5; }
 
-.filter-row { display: flex; gap: 6px; margin-bottom: 1rem; }
+.filter-row { display: flex; align-items: center; gap: 6px; margin-bottom: 1rem; }
+
+.show-done-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 8px;
+  cursor: pointer;
+}
 
 .section-divider {
   display: flex;
