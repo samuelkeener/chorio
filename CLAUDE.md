@@ -26,6 +26,7 @@ Stack: React 19 + Vite + `@supabase/supabase-js`, deployed to a URL that auto-de
   - Baseline is `last_done_at`, or `created_at` if never done (so new chores start green, not red)
   - Thresholds scale with the chore's own interval: yellow at `ceil(interval_days / 6)` days overdue, red at double that — this reproduces the originally-specified Daily (+1/+2 days), Weekly (+2/+4), Monthly (+5/+10) targets exactly, and extends the same formula to Biweekly and Custom
   - Colors interpolate smoothly between green/yellow/red rather than jumping in discrete steps
+  - Daily/Weekly/Monthly chores can optionally get a **manual recurring deadline** (added 2026-07-08): a time-of-day for Daily, a day-of-week + optional time for Weekly, a day-of-month + optional time for Monthly (`deadline_time`/`deadline_weekday`/`deadline_day_of_month` columns). This is a fixed schedule computed fresh each render (e.g. "every Sunday at 6pm forever"), not a stored date that shifts — completing the chore early doesn't pull the next deadline forward. When set, it fully replaces the last-done-relative color calculation for that chore. Set/edited via an inline per-row editor (click "Set deadline"/"Edit deadline" in the chore's meta row), not just at creation time.
 - **Shopping tab**: categorized list, add/check/delete/clear-checked
 - **History tab**: completion log + per-person completed counts (Sam/Anne)
 

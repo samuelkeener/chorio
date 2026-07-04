@@ -87,6 +87,42 @@ body {
   text-align: center;
 }
 
+.add-row input[type="time"] {
+  flex: none;
+  width: 110px;
+}
+
+.deadline-row {
+  margin-top: -0.5rem;
+}
+
+.deadline-row label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.deadline-editor {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.deadline-editor select, .deadline-editor input, .deadline-editor button {
+  padding: 5px 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.deadline-edit-link {
+  color: #185FA5;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 button {
   padding: 7px 14px;
   border-radius: 6px;
