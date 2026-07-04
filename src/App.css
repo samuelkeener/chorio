@@ -243,6 +243,16 @@ button:hover { background: #f5f5f5; }
 .badge-anne { background: #FBEAF0; color: #72243E; }
 .badge-both { background: #EAF3DE; color: #27500A; }
 
+.editable-badge { cursor: pointer; }
+.editable-badge:hover { opacity: 0.75; }
+
+.assignee-select {
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 10px;
+  border: 1px solid #ddd;
+}
+
 .delete-btn {
   color: #999;
   border: none;

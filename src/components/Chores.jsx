@@ -38,6 +38,7 @@ export default function Chores({ user }) {
   const [whoFilter, setWhoFilter] = useState('All')
   const [editingNameId, setEditingNameId] = useState(null)
   const [nameDraft, setNameDraft] = useState('')
+  const [editingAssigneeId, setEditingAssigneeId] = useState(null)
 
   useEffect(() => { fetchChores() }, [])
 
@@ -92,6 +93,13 @@ export default function Chores({ user }) {
     setEditingNameId(null)
     if (!trimmed || trimmed === chore.name) return
     await supabase.from('chores').update({ name: trimmed }).eq('id', chore.id)
+    fetchChores()
+  }
+
+  async function saveAssignee(chore, newAssignee) {
+    setEditingAssigneeId(null)
+    if (newAssignee === chore.assigned_to) return
+    await supabase.from('chores').update({ assigned_to: newAssignee }).eq('id', chore.id)
     fetchChores()
   }
 
@@ -245,7 +253,26 @@ export default function Chores({ user }) {
                     <div className="task-name editable-name" onClick={() => startEditingName(chore)}>{chore.name}</div>
                   )}
                   <div className="task-meta">
-                    <span className={`badge badge-${chore.assigned_to.toLowerCase()}`}>{chore.assigned_to}</span>
+                    {editingAssigneeId === chore.id ? (
+                      <select
+                        className="assignee-select"
+                        value={chore.assigned_to}
+                        autoFocus
+                        onChange={e => saveAssignee(chore, e.target.value)}
+                        onBlur={() => setEditingAssigneeId(null)}
+                      >
+                        <option>Sam</option>
+                        <option>Anne</option>
+                        <option>Both</option>
+                      </select>
+                    ) : (
+                      <span
+                        className={`badge badge-${chore.assigned_to.toLowerCase()} editable-badge`}
+                        onClick={() => setEditingAssigneeId(chore.id)}
+                      >
+                        {chore.assigned_to}
+                      </span>
+                    )}
                     {freq === 'Custom' && <span>{formatInterval(chore)}</span>}
                     <span>{chore.last_done_at ? 'Last done: ' + formatDateTime(chore.last_done_at) : 'Never done'}</span>
                     {chore.last_done_at && editingTimestampId !== chore.id && (
