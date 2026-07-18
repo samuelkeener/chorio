@@ -10,6 +10,8 @@ import {
   ordinal,
   toDatetimeLocal,
   choreColor,
+  localDateStr,
+  isSkippedToday,
 } from '../choreLogic'
 
 // Default deadline field values for the inline editor, seeded from an existing chore if any.
@@ -83,6 +85,16 @@ export default function Chores({ user }) {
     fetchChores()
   }
 
+  async function skipToday(chore) {
+    await supabase.from('chores').update({ skipped_on: localDateStr(new Date()) }).eq('id', chore.id)
+    fetchChores()
+  }
+
+  async function unskip(chore) {
+    await supabase.from('chores').update({ skipped_on: null }).eq('id', chore.id)
+    fetchChores()
+  }
+
   function startEditingName(chore) {
     setEditingNameId(chore.id)
     setNameDraft(chore.name)
@@ -144,6 +156,7 @@ export default function Chores({ user }) {
 
   const groups = ['Daily', 'Weekly', 'Biweekly', 'Monthly', 'Custom']
   const canHaveDeadline = DEADLINE_FREQUENCIES.includes(frequency)
+  const now = new Date()
 
   return (
     <div>
@@ -233,8 +246,10 @@ export default function Chores({ user }) {
         return (
           <div key={freq} className="chore-group">
             <div className="chore-group-label">{freq}</div>
-            {items.map(chore => (
-              <div key={chore.id} className="task-row chore-row" style={{ backgroundColor: choreColor(chore) }}>
+            {items.map(chore => {
+              const skipped = isSkippedToday(chore, now)
+              return (
+              <div key={chore.id} className="task-row chore-row" style={{ backgroundColor: choreColor(chore), opacity: skipped ? 0.6 : 1 }}>
                 <div className="check" onClick={() => markDone(chore)} />
                 <div className="task-info">
                   {editingNameId === chore.id ? (
@@ -284,6 +299,11 @@ export default function Chores({ user }) {
                         {hasDeadline(chore) ? 'Edit deadline' : 'Set deadline'}
                       </span>
                     )}
+                    {skipped ? (
+                      <span className="deadline-edit-link" onClick={() => unskip(chore)}>Skipped today (Unskip)</span>
+                    ) : (
+                      <span className="deadline-edit-link" onClick={() => skipToday(chore)}>Skip today</span>
+                    )}
                   </div>
                   {editingTimestampId === chore.id && (
                     <div className="deadline-editor">
@@ -318,7 +338,8 @@ export default function Chores({ user }) {
                 </div>
                 <button className="delete-btn" onClick={() => deleteChore(chore.id)}>✕</button>
               </div>
-            ))}
+              )
+            })}
           </div>
         )
       })}
