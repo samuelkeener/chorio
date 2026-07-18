@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
-import { hasDeadline, doneForCurrentCycle, relevantDueDate, formatDeadline, choreColor } from '../choreLogic'
+import { hasDeadline, doneForCurrentCycle, relevantDueDate, formatDeadline, choreColor, isSkippedToday, isDoneDismissed, toDatetimeLocal, formatDateTime } from '../choreLogic'
 
 function formatCompletedAt(timestamp) {
   if (!timestamp) return ''
@@ -14,11 +14,18 @@ function isSameDay(a, b) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 }
 
-function startOfDay(d) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+// Order among undated items: explicit sort_order wins (ascending), then falls back to
+// newest-created-first for anything never manually reordered - matches the pre-reorder default.
+function compareBySortOrder(a, b) {
+  const ao = a.record.sort_order
+  const bo = b.record.sort_order
+  if (ao != null && bo != null) return ao - bo
+  if (ao != null) return -1
+  if (bo != null) return 1
+  return new Date(b.record.created_at) - new Date(a.record.created_at)
 }
 
-// Normalize a task or chore into the shape the merged Today/Tomorrow/Future/Done list needs.
+// Normalize a task or chore into the shape the merged deadline/no-deadline/Done list needs.
 function toItem(record, type, now) {
   if (type === 'task') {
     return {
@@ -31,7 +38,7 @@ function toItem(record, type, now) {
       category: record.category,
       isDone: record.done,
       doneAt: record.completed_at,
-      dueDate: null,
+      dueDate: record.deadline ? new Date(record.deadline) : null,
     }
   }
 
@@ -57,23 +64,13 @@ function toItem(record, type, now) {
   }
 }
 
-function bucketOf(item, now) {
-  if (item.isDone) return 'Done'
-  if (!item.dueDate) return 'Today'
-  const diffDays = Math.round((startOfDay(item.dueDate) - startOfDay(now)) / (1000 * 60 * 60 * 24))
-  if (diffDays <= 0) return 'Today'
-  if (diffDays === 1) return 'Tomorrow'
-  return 'Future'
-}
-
-const SECTIONS = ['Today', 'Tomorrow', 'Future', 'Done']
-
-export default function Tasks({ user }) {
+export default function Tasks({ user, title = 'Tasks', projectId = null, includeChores = true }) {
   const [tasks, setTasks] = useState([])
   const [chores, setChores] = useState([])
   const [newTask, setNewTask] = useState('')
   const [assignTo, setAssignTo] = useState('Sam')
-  const [filter, setFilter] = useState('all')
+  const [newCategory, setNewCategory] = useState('')
+  const [filter, setFilter] = useState('mine')
   const [showDone, setShowDone] = useState(true)
   const [activeCategories, setActiveCategories] = useState(new Set())
   const [editingNameKey, setEditingNameKey] = useState(null)
@@ -82,11 +79,18 @@ export default function Tasks({ user }) {
   const [editingCategoryKey, setEditingCategoryKey] = useState(null)
   const [categoryDraft, setCategoryDraft] = useState('')
   const [categoryTouched, setCategoryTouched] = useState(false)
+  const [editingCompletedByKey, setEditingCompletedByKey] = useState(null)
+  const [editingDeadlineKey, setEditingDeadlineKey] = useState(null)
+  const [deadlineDraft, setDeadlineDraft] = useState('')
+  const [editingNoteKey, setEditingNoteKey] = useState(null)
+  const [noteDraft, setNoteDraft] = useState('')
 
-  useEffect(() => { fetchTasks(); fetchChores() }, [])
+  useEffect(() => { fetchTasks(); if (includeChores) fetchChores() }, [projectId])
 
   async function fetchTasks() {
-    const { data } = await supabase.from('tasks').select('*').order('created_at', { ascending: false })
+    let query = supabase.from('tasks').select('*').order('created_at', { ascending: false })
+    query = projectId ? query.eq('project_id', projectId) : query.is('project_id', null)
+    const { data } = await query
     if (data) setTasks(data)
   }
 
@@ -97,8 +101,9 @@ export default function Tasks({ user }) {
 
   async function addTask() {
     if (!newTask.trim()) return
-    await supabase.from('tasks').insert({ name: newTask, assigned_to: assignTo })
+    await supabase.from('tasks').insert({ name: newTask, assigned_to: assignTo, category: newCategory.trim() || null, project_id: projectId })
     setNewTask('')
+    setNewCategory('')
     fetchTasks()
   }
 
@@ -115,6 +120,24 @@ export default function Tasks({ user }) {
   async function deleteTask(id) {
     await supabase.from('tasks').delete().eq('id', id)
     fetchTasks()
+  }
+
+  // Clears whatever's currently visible in the Done section (respects the active filter/category
+  // selection). Tasks are permanently deleted. Chores can't be deleted from this view, and
+  // clearing one must not lose its real completion history - so it just dismisses this
+  // completion from the Done list (done_dismissed_at) without touching last_done_at/by. It
+  // reappears normally once done again or once its cycle rolls over.
+  async function clearDone(doneTaskIds, doneChoreIds) {
+    const total = doneTaskIds.length + doneChoreIds.length
+    if (!total) return
+    const parts = []
+    if (doneTaskIds.length) parts.push(`${doneTaskIds.length} task${doneTaskIds.length === 1 ? '' : 's'} (deleted)`)
+    if (doneChoreIds.length) parts.push(`${doneChoreIds.length} chore${doneChoreIds.length === 1 ? '' : 's'} (hidden until next done)`)
+    if (!window.confirm(`Clear ${parts.join(' and ')} from Done?`)) return
+    if (doneTaskIds.length) await supabase.from('tasks').delete().in('id', doneTaskIds)
+    if (doneChoreIds.length) await supabase.from('chores').update({ done_dismissed_at: new Date().toISOString() }).in('id', doneChoreIds)
+    fetchTasks()
+    if (includeChores) fetchChores()
   }
 
   async function markChoreDone(chore) {
@@ -168,6 +191,60 @@ export default function Tasks({ user }) {
     fetchTasks()
   }
 
+  async function saveCompletedBy(item, newCompletedBy) {
+    setEditingCompletedByKey(null)
+    if (newCompletedBy === item.record.completed_by) return
+    await supabase.from('tasks').update({ completed_by: newCompletedBy }).eq('id', item.id)
+    fetchTasks()
+  }
+
+  function startEditingDeadline(item) {
+    setEditingDeadlineKey(item.key)
+    setDeadlineDraft(toDatetimeLocal(item.record.deadline))
+  }
+
+  async function saveDeadline(item) {
+    setEditingDeadlineKey(null)
+    if (!deadlineDraft) return
+    await supabase.from('tasks').update({ deadline: new Date(deadlineDraft).toISOString() }).eq('id', item.id)
+    fetchTasks()
+  }
+
+  async function clearDeadline(item) {
+    setEditingDeadlineKey(null)
+    await supabase.from('tasks').update({ deadline: null }).eq('id', item.id)
+    fetchTasks()
+  }
+
+  function startEditingNote(item) {
+    setEditingNoteKey(item.key)
+    setNoteDraft(item.record.note || '')
+  }
+
+  async function saveNote(item) {
+    setEditingNoteKey(null)
+    const trimmed = noteDraft.trim()
+    if (trimmed === (item.record.note || '')) return
+    await supabase.from('tasks').update({ note: trimmed || null }).eq('id', item.id)
+    fetchTasks()
+  }
+
+  // Renumbers the whole undated group to match the new order after a single up/down move -
+  // sidesteps tie-breaking edge cases from swapping just two possibly-null sort_order values.
+  async function moveWithinNoDeadline(list, index, direction) {
+    const otherIndex = index + direction
+    if (otherIndex < 0 || otherIndex >= list.length) return
+    const reordered = [...list]
+    const [moved] = reordered.splice(index, 1)
+    reordered.splice(otherIndex, 0, moved)
+    await Promise.all(reordered.map((item, i) => {
+      const table = item.type === 'task' ? 'tasks' : 'chores'
+      return supabase.from(table).update({ sort_order: i }).eq('id', item.id)
+    }))
+    await fetchTasks()
+    if (includeChores) await fetchChores()
+  }
+
   function toggleCategory(cat) {
     setActiveCategories(prev => {
       const next = new Set(prev)
@@ -181,8 +258,8 @@ export default function Tasks({ user }) {
   const now = new Date()
   const items = [
     ...tasks.map(t => toItem(t, 'task', now)),
-    ...chores.map(c => toItem(c, 'chore', now)),
-  ].filter(item => {
+    ...(includeChores ? chores.filter(c => !isSkippedToday(c, now)).map(c => toItem(c, 'chore', now)) : []),
+  ].filter(item => !(item.type === 'chore' && item.isDone && isDoneDismissed(item.record))).filter(item => {
     if (filter === 'mine' && !(item.assignedTo === user || item.assignedTo === 'Both')) return false
     if (filter === 'open' && item.isDone) return false
     if (filter === 'done' && !item.isDone) return false
@@ -190,21 +267,21 @@ export default function Tasks({ user }) {
     return true
   })
 
-  const sections = SECTIONS.filter(name => name !== 'Done' || showDone).map(name => {
-    const sectionItems = items.filter(item => bucketOf(item, now) === name)
-    sectionItems.sort((a, b) => {
-      if (name === 'Done') return new Date(b.doneAt || 0) - new Date(a.doneAt || 0)
-      const aKey = a.dueDate ? a.dueDate.getTime() : Infinity
-      const bKey = b.dueDate ? b.dueDate.getTime() : Infinity
-      return aKey - bKey
-    })
-    return { name, items: sectionItems }
-  }).filter(section => section.items.length > 0)
+  const openItems = items.filter(item => !item.isDone)
+  const withDeadline = openItems.filter(item => item.dueDate).sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
+  const noDeadline = openItems.filter(item => !item.dueDate).sort(compareBySortOrder)
+  const doneItems = items.filter(item => item.isDone).sort((a, b) => new Date(b.doneAt || 0) - new Date(a.doneAt || 0))
+
+  const sections = [
+    { name: null, items: withDeadline },
+    { name: 'No deadline', items: noDeadline },
+    ...(showDone ? [{ name: 'Done', items: doneItems }] : []),
+  ].filter(section => section.items.length > 0)
 
   return (
     <div>
       <div className="section-header">
-        <h2>Tasks</h2>
+        <h2>{title}</h2>
       </div>
 
       <datalist id="category-options">
@@ -218,6 +295,14 @@ export default function Tasks({ user }) {
           <option>Anne</option>
           <option>Both</option>
         </select>
+        <input
+          className="category-input new-category-input"
+          value={newCategory}
+          onChange={e => setNewCategory(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && addTask()}
+          placeholder="Category..."
+          list="category-options"
+        />
         <button onClick={addTask}>Add</button>
       </div>
 
@@ -245,9 +330,26 @@ export default function Tasks({ user }) {
       )}
 
       {sections.map(section => (
-        <div key={section.name}>
-          <div className="section-divider"><span>{section.name}</span></div>
-          {section.items.map(item => (
+        <div key={section.name || 'deadline'}>
+          {section.name && (
+            <div className="section-divider">
+              <span>
+                {section.name}
+                {section.name === 'Done' && section.items.length > 0 && (
+                  <button
+                    className="clear-done-btn"
+                    onClick={() => clearDone(
+                      section.items.filter(i => i.type === 'task').map(i => i.id),
+                      section.items.filter(i => i.type === 'chore').map(i => i.id),
+                    )}
+                  >
+                    Clear done
+                  </button>
+                )}
+              </span>
+            </div>
+          )}
+          {section.items.map((item, idx) => (
             <div
               key={item.key}
               className={item.type === 'chore' ? 'task-row chore-row' : 'task-row'}
@@ -274,6 +376,26 @@ export default function Tasks({ user }) {
                   <div className={`task-name editable-name ${item.isDone ? 'done' : ''}`} onClick={() => startEditingName(item)}>
                     {item.type === 'chore' && '🔁 '}{item.name}
                   </div>
+                )}
+                {item.type === 'task' && (
+                  editingNoteKey === item.key ? (
+                    <input
+                      className="task-note-input"
+                      value={noteDraft}
+                      autoFocus
+                      placeholder="Note..."
+                      onChange={e => setNoteDraft(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') saveNote(item)
+                        if (e.key === 'Escape') setEditingNoteKey(null)
+                      }}
+                      onBlur={() => saveNote(item)}
+                    />
+                  ) : (
+                    <div className="task-note editable-name" onClick={() => startEditingNote(item)}>
+                      {item.record.note || '+ Note'}
+                    </div>
+                  )
                 )}
                 <div className="task-meta">
                   {editingAssigneeKey === item.key ? (
@@ -318,14 +440,48 @@ export default function Tasks({ user }) {
                     )
                   )}
                   {item.type === 'task' && item.isDone && item.record.completed_by && (
-                    <span>Done by {item.record.completed_by} {formatCompletedAt(item.record.completed_at)}</span>
+                    editingCompletedByKey === item.key ? (
+                      <select
+                        className="assignee-select"
+                        value={item.record.completed_by}
+                        autoFocus
+                        onChange={e => saveCompletedBy(item, e.target.value)}
+                        onBlur={() => setEditingCompletedByKey(null)}
+                      >
+                        <option>Sam</option>
+                        <option>Anne</option>
+                      </select>
+                    ) : (
+                      <span className="editable-name" onClick={() => setEditingCompletedByKey(item.key)}>
+                        Done by {item.record.completed_by} {formatCompletedAt(item.record.completed_at)}
+                      </span>
+                    )
                   )}
                   {item.type === 'chore' && hasDeadline(item.record) && <span>{formatDeadline(item.record)}</span>}
-                  {item.type === 'chore' && item.isDone && (
-                    <span>Last done: {formatCompletedAt(item.record.last_done_at)}</span>
+                  {item.type === 'chore' && (
+                    <span>{item.record.last_done_at ? `Last done: ${formatCompletedAt(item.record.last_done_at)}` : 'Never done'}</span>
+                  )}
+                  {item.type === 'task' && editingDeadlineKey !== item.key && (
+                    <span className="deadline-edit-link" onClick={() => startEditingDeadline(item)}>
+                      {item.record.deadline ? `Due ${formatDateTime(item.record.deadline)}` : 'Set deadline'}
+                    </span>
                   )}
                 </div>
+                {item.type === 'task' && editingDeadlineKey === item.key && (
+                  <div className="deadline-editor">
+                    <input type="datetime-local" value={deadlineDraft} onChange={e => setDeadlineDraft(e.target.value)} />
+                    <button onClick={() => saveDeadline(item)}>Save</button>
+                    {item.record.deadline && <button onClick={() => clearDeadline(item)}>Clear</button>}
+                    <button onClick={() => setEditingDeadlineKey(null)}>Cancel</button>
+                  </div>
+                )}
               </div>
+              {section.name === 'No deadline' && (
+                <div className="reorder-btns">
+                  <button disabled={idx === 0} onClick={() => moveWithinNoDeadline(section.items, idx, -1)}>▲</button>
+                  <button disabled={idx === section.items.length - 1} onClick={() => moveWithinNoDeadline(section.items, idx, 1)}>▼</button>
+                </div>
+              )}
               {item.type === 'task' && (
                 <button className="delete-btn" onClick={() => deleteTask(item.id)}>✕</button>
               )}

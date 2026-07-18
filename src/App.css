@@ -53,6 +53,24 @@ body {
 
 .tab.active { color: #1a1a1a; border-bottom-color: #1a1a1a; font-weight: 500; }
 
+.project-tab { display: flex; align-items: center; gap: 4px; }
+.project-tab span { cursor: pointer; }
+.project-tab.active span { cursor: text; }
+
+.project-tab-delete { font-size: 11px; padding: 0; color: #bbb; }
+.project-tab-delete:hover { color: #555; }
+
+.project-tab-input {
+  font-size: 14px;
+  font-family: inherit;
+  border: 1px solid #185FA5;
+  border-radius: 4px;
+  padding: 1px 4px;
+  width: 100px;
+}
+
+.add-tab { color: #999; font-weight: 600; }
+
 .section-header {
   display: flex;
   align-items: center;
@@ -167,6 +185,20 @@ button:hover { background: #f5f5f5; }
 
 .section-divider span { padding: 0 10px; white-space: nowrap; }
 
+.clear-done-btn {
+  margin-left: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #185FA5;
+  text-decoration: underline;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 11px;
+  cursor: pointer;
+}
+.clear-done-btn:hover { color: #0C447C; background: none; }
+
 .filter-pill {
   padding: 4px 12px;
   border-radius: 16px;
@@ -206,6 +238,44 @@ button:hover { background: #f5f5f5; }
 .check.done { background: #1D9E75; border-color: #1D9E75; }
 
 .task-info { flex: 1; }
+
+.task-note {
+  font-size: 12px;
+  color: #767676;
+  margin-top: 2px;
+}
+
+.task-note-input {
+  font-size: 12px;
+  font-family: inherit;
+  border: 1px solid #185FA5;
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin-top: 2px;
+  width: 100%;
+  max-width: 260px;
+}
+
+.reorder-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.reorder-btns button {
+  padding: 0 4px;
+  font-size: 9px;
+  line-height: 1.4;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  color: #999;
+  background: white;
+  cursor: pointer;
+}
+
+.reorder-btns button:hover:not(:disabled) { color: #555; }
+.reorder-btns button:disabled { opacity: 0.3; cursor: default; }
 
 .task-name { font-size: 14px; }
 .task-name.done { text-decoration: line-through; color: #999; }
@@ -268,6 +338,11 @@ button:hover { background: #f5f5f5; }
   border-radius: 10px;
   border: 1px solid #185FA5;
   width: 110px;
+}
+
+.new-category-input {
+  flex: none;
+  border-color: #ddd;
 }
 
 .delete-btn {
@@ -334,3 +409,22 @@ button:hover { background: #f5f5f5; }
 .history-when { color: #767676; font-size: 12px; }
 
 .empty { text-align: center; padding: 2rem 0; color: #767676; font-size: 14px; }
+
+/* iOS Safari zooms the whole page in when focusing a form control with font-size under 16px,
+   which is what made selects/inputs feel "broken" on mobile - bump them to 16px there. */
+@media (max-width: 480px) {
+  .add-row select,
+  .add-row input,
+  .deadline-editor select,
+  .deadline-editor input,
+  .task-name-input,
+  .assignee-select,
+  .category-input,
+  .project-tab-input,
+  .task-note-input {
+    font-size: 16px;
+  }
+
+  .assignee-select { padding: 3px 8px; }
+  .category-input { padding: 3px 8px; width: 130px; }
+}

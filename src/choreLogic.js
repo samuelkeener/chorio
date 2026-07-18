@@ -35,6 +35,31 @@ export function toDatetimeLocal(isoString) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+// "YYYY-MM-DD" for a Date, in local time - used to compare against the skipped_on column,
+// which is a plain date with no timezone.
+export function localDateStr(d) {
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+// Has this chore been explicitly skipped for today? Distinct from being done - skipping
+// hides it from today's view without crediting anyone or touching last_done_at/by.
+export function isSkippedToday(chore, now) {
+  return chore.skipped_on === localDateStr(now)
+}
+
+// Has this chore's *current* completion been dismissed from the Tasks tab's Done list?
+// Dismissing hides it from Done without touching last_done_at/by - unlike un-doing the
+// completion, the chore still correctly shows its real last-done date everywhere else.
+// The dismissal only applies to the completion it was made against: if the chore gets marked
+// done again (last_done_at moves past done_dismissed_at) or its cycle rolls over (it's no
+// longer done at all), it reappears normally.
+export function isDoneDismissed(chore) {
+  if (!chore.done_dismissed_at) return false
+  if (!chore.last_done_at) return true
+  return new Date(chore.done_dismissed_at) >= new Date(chore.last_done_at)
+}
+
 // Does this chore have a manually-set recurring deadline (as opposed to being tracked
 // relative to when it was last done)?
 export function hasDeadline(chore) {
@@ -188,13 +213,23 @@ export function doneForCurrentCycle(chore, now) {
   return !!(chore.last_done_at && cycleStart && new Date(chore.last_done_at) >= cycleStart)
 }
 
-// The single date that should drive Today/Tomorrow/Future placement for a chore with a
-// manual deadline: the current cycle's deadline if not yet done, or the next cycle's if it is.
-// Chores without a manual deadline have no such date (they're always "ambient", see Tasks.jsx).
+// The single date that should drive deadline-sorted placement for a chore with a manual
+// deadline. Chores without a manual deadline have no such date (they're always "ambient",
+// see Tasks.jsx).
+//
+// If not done: the first occurrence missed since the last completion (or since created_at if
+// never done) - anchored to that fixed point in the past, NOT to now. This matters once it's
+// overdue: mostRecentDeadlineOccurrence(chore, now) would keep "catching up" to whatever
+// occurrence is closest to today as time passes, making a chore neglected for weeks look barely
+// overdue and never rise to the top of the deadline-sorted list. Anchoring to the last
+// completion instead means the due date stays exactly where it first became overdue.
+//
+// If done for the current cycle: the next cycle's occurrence (relative to now).
 export function relevantDueDate(chore, now) {
   if (!hasDeadline(chore)) return null
-  const recent = mostRecentDeadlineOccurrence(chore, now)
-  return doneForCurrentCycle(chore, now) ? nextDeadlineOccurrence(chore, now) : recent
+  if (doneForCurrentCycle(chore, now)) return nextDeadlineOccurrence(chore, now)
+  const anchor = chore.last_done_at ? new Date(chore.last_done_at) : new Date(chore.created_at)
+  return nextDeadlineOccurrence(chore, anchor)
 }
 
 const GREEN = [224, 242, 221]
