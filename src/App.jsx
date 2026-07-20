@@ -14,8 +14,20 @@ export default function App() {
   const [newProjectName, setNewProjectName] = useState('')
   const [editingProjectId, setEditingProjectId] = useState(null)
   const [projectNameDraft, setProjectNameDraft] = useState('')
+  // The inline script in index.html already set the initial attribute before React mounted
+  // (avoids a flash of the wrong theme) - read it back here so React's state agrees with the DOM.
+  const [theme, setTheme] = useState(() => document.documentElement.getAttribute('data-theme') || 'light')
 
   useEffect(() => { fetchProjects() }, [])
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('chorio-theme', theme)
+  }, [theme])
+
+  function toggleTheme() {
+    setTheme(t => (t === 'dark' ? 'light' : 'dark'))
+  }
 
   async function fetchProjects() {
     const { data } = await supabase.from('projects').select('*').order('created_at', { ascending: true })
@@ -58,9 +70,19 @@ export default function App() {
     <div className="app">
       <div className="header">
         <h1>Home hub</h1>
-        <div className="person-toggle">
-          <button className={user === 'Sam' ? 'pill sam active' : 'pill sam'} onClick={() => setUser('Sam')}>Sam</button>
-          <button className={user === 'Anne' ? 'pill anne active' : 'pill anne'} onClick={() => setUser('Anne')}>Anne</button>
+        <div className="header-right">
+          <button
+            className="theme-toggle"
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+          <div className="person-toggle">
+            <button className={user === 'Sam' ? 'pill sam active' : 'pill sam'} onClick={() => setUser('Sam')}>Sam</button>
+            <button className={user === 'Anne' ? 'pill anne active' : 'pill anne'} onClick={() => setUser('Anne')}>Anne</button>
+          </div>
         </div>
       </div>
 
@@ -117,11 +139,11 @@ export default function App() {
         )}
       </div>
 
-      {tab === 'tasks' && <Tasks user={user} />}
-      {tab === 'chores' && <Chores user={user} />}
+      {tab === 'tasks' && <Tasks user={user} theme={theme} />}
+      {tab === 'chores' && <Chores user={user} theme={theme} />}
       {tab === 'shopping' && <Shopping user={user} />}
       {tab === 'history' && <History />}
-      {activeProject && <Tasks user={user} title={activeProject.name} projectId={activeProject.id} includeChores={false} />}
+      {activeProject && <Tasks user={user} theme={theme} title={activeProject.name} projectId={activeProject.id} includeChores={false} />}
     </div>
   )
 }
