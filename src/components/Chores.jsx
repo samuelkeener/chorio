@@ -24,7 +24,7 @@ function blankDeadlineDraft(chore) {
   }
 }
 
-export default function Chores({ user }) {
+export default function Chores({ user, theme = 'light' }) {
   const [chores, setChores] = useState([])
   const [newChore, setNewChore] = useState('')
   const [assignTo, setAssignTo] = useState('Sam')
@@ -249,7 +249,7 @@ export default function Chores({ user }) {
             {items.map(chore => {
               const skipped = isSkippedToday(chore, now)
               return (
-              <div key={chore.id} className="task-row chore-row" style={{ backgroundColor: choreColor(chore), opacity: skipped ? 0.6 : 1 }}>
+              <div key={chore.id} className="task-row chore-row" style={{ backgroundColor: choreColor(chore, theme === 'dark'), opacity: skipped ? 0.6 : 1 }}>
                 <div className="check" onClick={() => markDone(chore)} />
                 <div className="task-info">
                   {editingNameId === chore.id ? (

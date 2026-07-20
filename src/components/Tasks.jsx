@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
-import { hasDeadline, doneForCurrentCycle, relevantDueDate, formatDeadline, choreColor, isSkippedToday, isDoneDismissed, toDatetimeLocal, formatDateTime } from '../choreLogic'
+import { hasDeadline, doneForCurrentCycle, relevantDueDate, choreColor, taskColor, isSkippedToday, isTooFarOut, toDatetimeLocal, formatDateTime } from '../choreLogic'
 
 function formatCompletedAt(timestamp) {
   if (!timestamp) return ''
@@ -44,7 +44,7 @@ function toItem(record, type, now) {
 
   // chore
   const withDeadline = hasDeadline(record)
-  const isDone = withDeadline
+  const isDoneForCycle = withDeadline
     ? doneForCurrentCycle(record, now)
     : !!(record.last_done_at && isSameDay(new Date(record.last_done_at), now))
 
@@ -56,15 +56,21 @@ function toItem(record, type, now) {
     name: record.name,
     assignedTo: record.assigned_to,
     category: null,
-    isDone,
+    // Deadline chores never show as "done" here - completing one just rolls dueDate forward to
+    // the next occurrence, so it reappears as a fresh, unchecked entry with the updated deadline
+    // rather than sitting checked-off (there's always another occurrence coming). Ambient chores
+    // (no manual deadline) have no discrete next occurrence to roll forward to, so they still
+    // show checked for the rest of the day they're done.
+    isDone: withDeadline ? false : isDoneForCycle,
     doneAt: record.last_done_at,
-    // Chores without a manual deadline are always "ambient" (Today) unless done today -
-    // there's no specific calendar date to place them on.
-    dueDate: withDeadline && !isDone ? relevantDueDate(record, now) : null,
+    // Always the real next occurrence: upcoming if just done, or pinned in the past (overdue) if
+    // not. Chores never move to the Done section (see below) - this drives their position in the
+    // deadline-sorted flow instead. Ambient chores have no specific calendar date to place them on.
+    dueDate: withDeadline ? relevantDueDate(record, now) : null,
   }
 }
 
-export default function Tasks({ user, title = 'Tasks', projectId = null, includeChores = true }) {
+export default function Tasks({ user, theme = 'light', title = 'Tasks', projectId = null, includeChores = true }) {
   const [tasks, setTasks] = useState([])
   const [chores, setChores] = useState([])
   const [newTask, setNewTask] = useState('')
@@ -122,22 +128,15 @@ export default function Tasks({ user, title = 'Tasks', projectId = null, include
     fetchTasks()
   }
 
-  // Clears whatever's currently visible in the Done section (respects the active filter/category
-  // selection). Tasks are permanently deleted. Chores can't be deleted from this view, and
-  // clearing one must not lose its real completion history - so it just dismisses this
-  // completion from the Done list (done_dismissed_at) without touching last_done_at/by. It
-  // reappears normally once done again or once its cycle rolls over.
-  async function clearDone(doneTaskIds, doneChoreIds) {
-    const total = doneTaskIds.length + doneChoreIds.length
-    if (!total) return
-    const parts = []
-    if (doneTaskIds.length) parts.push(`${doneTaskIds.length} task${doneTaskIds.length === 1 ? '' : 's'} (deleted)`)
-    if (doneChoreIds.length) parts.push(`${doneChoreIds.length} chore${doneChoreIds.length === 1 ? '' : 's'} (hidden until next done)`)
-    if (!window.confirm(`Clear ${parts.join(' and ')} from Done?`)) return
-    if (doneTaskIds.length) await supabase.from('tasks').delete().in('id', doneTaskIds)
-    if (doneChoreIds.length) await supabase.from('chores').update({ done_dismissed_at: new Date().toISOString() }).in('id', doneChoreIds)
+  // Deletes whatever done tasks are currently visible in the Done section (respects the active
+  // filter/category selection). Chores never appear in Done - they always stay in the
+  // deadline-sorted flow at their real next occurrence, checkbox reflecting done/not-done - so
+  // there's nothing for this to do to them.
+  async function clearDone(doneTaskIds) {
+    if (!doneTaskIds.length) return
+    if (!window.confirm(`Clear ${doneTaskIds.length} done task${doneTaskIds.length === 1 ? '' : 's'}? This cannot be undone.`)) return
+    await supabase.from('tasks').delete().in('id', doneTaskIds)
     fetchTasks()
-    if (includeChores) fetchChores()
   }
 
   async function markChoreDone(chore) {
@@ -258,19 +257,24 @@ export default function Tasks({ user, title = 'Tasks', projectId = null, include
   const now = new Date()
   const items = [
     ...tasks.map(t => toItem(t, 'task', now)),
-    ...(includeChores ? chores.filter(c => !isSkippedToday(c, now)).map(c => toItem(c, 'chore', now)) : []),
-  ].filter(item => !(item.type === 'chore' && item.isDone && isDoneDismissed(item.record))).filter(item => {
+    ...(includeChores ? chores.filter(c => !isSkippedToday(c, now) && !isTooFarOut(c, now)).map(c => toItem(c, 'chore', now)) : []),
+  ].filter(item => {
     if (filter === 'mine' && !(item.assignedTo === user || item.assignedTo === 'Both')) return false
     if (filter === 'open' && item.isDone) return false
     if (filter === 'done' && !item.isDone) return false
-    if (activeCategories.size > 0 && item.type === 'task' && !activeCategories.has(item.category)) return false
+    if (activeCategories.size > 0) {
+      if (item.type === 'chore') return false
+      if (!activeCategories.has(item.category)) return false
+    }
     return true
   })
 
-  const openItems = items.filter(item => !item.isDone)
+  // Chores never move to Done - they always stay in the deadline/no-deadline flow at their real
+  // next occurrence (checkbox still reflects done/not-done). Only tasks get a separate Done pile.
+  const openItems = items.filter(item => item.type === 'chore' || !item.isDone)
   const withDeadline = openItems.filter(item => item.dueDate).sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
   const noDeadline = openItems.filter(item => !item.dueDate).sort(compareBySortOrder)
-  const doneItems = items.filter(item => item.isDone).sort((a, b) => new Date(b.doneAt || 0) - new Date(a.doneAt || 0))
+  const doneItems = items.filter(item => item.type === 'task' && item.isDone).sort((a, b) => new Date(b.doneAt || 0) - new Date(a.doneAt || 0))
 
   const sections = [
     { name: null, items: withDeadline },
@@ -338,10 +342,7 @@ export default function Tasks({ user, title = 'Tasks', projectId = null, include
                 {section.name === 'Done' && section.items.length > 0 && (
                   <button
                     className="clear-done-btn"
-                    onClick={() => clearDone(
-                      section.items.filter(i => i.type === 'task').map(i => i.id),
-                      section.items.filter(i => i.type === 'chore').map(i => i.id),
-                    )}
+                    onClick={() => clearDone(section.items.map(i => i.id))}
                   >
                     Clear done
                   </button>
@@ -349,11 +350,13 @@ export default function Tasks({ user, title = 'Tasks', projectId = null, include
               </span>
             </div>
           )}
-          {section.items.map((item, idx) => (
+          {section.items.map((item, idx) => {
+            const color = item.type === 'chore' ? choreColor(item.record, theme === 'dark') : taskColor(item.record, theme === 'dark')
+            return (
             <div
               key={item.key}
-              className={item.type === 'chore' ? 'task-row chore-row' : 'task-row'}
-              style={item.type === 'chore' ? { backgroundColor: choreColor(item.record) } : undefined}
+              className={color ? 'task-row chore-row' : 'task-row'}
+              style={color ? { backgroundColor: color } : undefined}
             >
               <div
                 className={`check ${item.isDone ? 'done' : ''}`}
@@ -457,7 +460,7 @@ export default function Tasks({ user, title = 'Tasks', projectId = null, include
                       </span>
                     )
                   )}
-                  {item.type === 'chore' && hasDeadline(item.record) && <span>{formatDeadline(item.record)}</span>}
+                  {item.type === 'chore' && item.dueDate && <span>Due {formatDateTime(item.dueDate)}</span>}
                   {item.type === 'chore' && (
                     <span>{item.record.last_done_at ? `Last done: ${formatCompletedAt(item.record.last_done_at)}` : 'Never done'}</span>
                   )}
@@ -486,7 +489,8 @@ export default function Tasks({ user, title = 'Tasks', projectId = null, include
                 <button className="delete-btn" onClick={() => deleteTask(item.id)}>✕</button>
               )}
             </div>
-          ))}
+            )
+          })}
         </div>
       ))}
     </div>

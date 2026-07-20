@@ -48,18 +48,6 @@ export function isSkippedToday(chore, now) {
   return chore.skipped_on === localDateStr(now)
 }
 
-// Has this chore's *current* completion been dismissed from the Tasks tab's Done list?
-// Dismissing hides it from Done without touching last_done_at/by - unlike un-doing the
-// completion, the chore still correctly shows its real last-done date everywhere else.
-// The dismissal only applies to the completion it was made against: if the chore gets marked
-// done again (last_done_at moves past done_dismissed_at) or its cycle rolls over (it's no
-// longer done at all), it reappears normally.
-export function isDoneDismissed(chore) {
-  if (!chore.done_dismissed_at) return false
-  if (!chore.last_done_at) return true
-  return new Date(chore.done_dismissed_at) >= new Date(chore.last_done_at)
-}
-
 // Does this chore have a manually-set recurring deadline (as opposed to being tracked
 // relative to when it was last done)?
 export function hasDeadline(chore) {
@@ -136,6 +124,10 @@ export function mostRecentDeadlineOccurrence(chore, now) {
 export function nextDeadlineOccurrence(chore, now) {
   const recent = mostRecentDeadlineOccurrence(chore, now)
   if (!recent) return null
+  // Custom chores whose schedule hasn't started yet relative to `now` fall back to returning
+  // their anchor date itself (see mostRecentDeadlineOccurrence) - that's already the next
+  // occurrence, so adding another interval on top would overshoot by a full cycle.
+  if (recent > now) return recent
   const [h, m] = (chore.deadline_time || '23:59').split(':').map(Number)
 
   if (chore.frequency === 'Daily') {
@@ -213,6 +205,17 @@ export function doneForCurrentCycle(chore, now) {
   return !!(chore.last_done_at && cycleStart && new Date(chore.last_done_at) >= cycleStart)
 }
 
+// Whether an occurrence falls on the same calendar day as `now` - i.e. it's still coming up
+// later today rather than tomorrow (or further out). Used by relevantDueDate to tell an early
+// completion (done well before today's own deadline) apart from an on-time-or-late one: if the
+// upcoming occurrence is still "later today", completing it now means that slot is already
+// covered, so the next relevant one is the one after - not "due later today" again. This works
+// the same way regardless of frequency, including Custom's rolling interval: whether the
+// upcoming boundary happens to land on today's date is exactly the same question either way.
+function isSameCalendarDay(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+}
+
 // The single date that should drive deadline-sorted placement for a chore with a manual
 // deadline. Chores without a manual deadline have no such date (they're always "ambient",
 // see Tasks.jsx).
@@ -224,53 +227,76 @@ export function doneForCurrentCycle(chore, now) {
 // overdue and never rise to the top of the deadline-sorted list. Anchoring to the last
 // completion instead means the due date stays exactly where it first became overdue.
 //
-// If done for the current cycle: the next cycle's occurrence (relative to now).
+// If done for the current cycle: the next cycle's occurrence - but if the upcoming occurrence is
+// still later today, that slot is already covered by this completion, so skip to the occurrence
+// after it instead ("delete the current iteration and look ahead to when it's next due").
 export function relevantDueDate(chore, now) {
   if (!hasDeadline(chore)) return null
-  if (doneForCurrentCycle(chore, now)) return nextDeadlineOccurrence(chore, now)
+  if (doneForCurrentCycle(chore, now)) {
+    const upcoming = nextDeadlineOccurrence(chore, now)
+    return isSameCalendarDay(upcoming, now) ? nextDeadlineOccurrence(chore, upcoming) : upcoming
+  }
   const anchor = chore.last_done_at ? new Date(chore.last_done_at) : new Date(chore.created_at)
   return nextDeadlineOccurrence(chore, anchor)
 }
 
-const GREEN = [224, 242, 221]
-const YELLOW = [255, 243, 205]
-const RED = [250, 219, 219]
-
-function lerpColor(from, to, t) {
-  const mix = (a, b) => Math.round(a + (b - a) * t)
-  return `rgb(${mix(from[0], to[0])}, ${mix(from[1], to[1])}, ${mix(from[2], to[2])})`
+// Deadline chores don't clutter the Tasks tab until they're actually relevant - hidden there
+// (still fully visible/actionable on the Chores tab) until their next occurrence is within two
+// weeks out. Overdue chores are always within two weeks by definition, so this never hides one
+// that needs attention. Ambient chores (no manual deadline) have no due date to judge, so they're
+// never hidden by this rule.
+export function isTooFarOut(chore, now) {
+  if (!hasDeadline(chore)) return false
+  const due = relevantDueDate(chore, now)
+  if (!due) return false
+  const daysUntilDue = (due - now) / (1000 * 60 * 60 * 24)
+  return daysUntilDue > 14
 }
 
-// Green while not yet due, then eases through yellow into red the further overdue it gets.
-// Thresholds scale with the chore's own interval (interval/6 for yellow, double that for red) -
-// this reproduces the daily (1/2 day), weekly (2/4 day) and monthly (5/10 day) targets exactly,
-// and extends the same rule to Biweekly and Custom frequencies.
-//
-// If a manual deadline is set, overdue-ness is measured against that fixed schedule instead of
+// Light-mode tints are soft pastels meant to sit on a white page; dark-mode uses deeper, more
+// desaturated versions of the same hues so they read as tinted cards on a dark page instead of
+// glowing/washing out. Same green/yellow/red/blue meaning either way.
+const PALETTE = {
+  light: { GREEN: [224, 242, 221], YELLOW: [255, 243, 205], RED: [250, 219, 219], BLUE: [219, 236, 250] },
+  dark: { GREEN: [32, 64, 48], YELLOW: [72, 58, 20], RED: [74, 36, 36], BLUE: [30, 50, 74] },
+}
+
+// Red once past a due date, by any amount - no gradient, overdue is overdue. Yellow if the due
+// date is today but hasn't passed yet. Otherwise green within a week out, blue one to two weeks
+// out, and blank (no color) beyond two weeks, so the list doesn't light up for things that aren't
+// worth thinking about yet. Shared by choreColor and taskColor below.
+function colorForDueDate(dueDate, now, dark) {
+  const { GREEN, YELLOW, RED, BLUE } = PALETTE[dark ? 'dark' : 'light']
+  if (dueDate < now) return `rgb(${RED.join(', ')})`
+  if (isSameCalendarDay(dueDate, now)) return `rgb(${YELLOW.join(', ')})`
+  const daysUntilDue = (dueDate - now) / (1000 * 60 * 60 * 24)
+  if (daysUntilDue > 14) return null
+  if (daysUntilDue > 7) return `rgb(${BLUE.join(', ')})`
+  return `rgb(${GREEN.join(', ')})`
+}
+
+// If a manual deadline is set, color is measured against that fixed schedule instead of
 // last_done_at + interval - completing the chore early doesn't pull the next deadline forward.
-export function choreColor(chore) {
+export function choreColor(chore, dark) {
   const now = new Date()
-  const days = intervalDays(chore)
-  let overdueBy
+  const { GREEN } = PALETTE[dark ? 'dark' : 'light']
 
   if (hasDeadline(chore)) {
-    const deadline = mostRecentDeadlineOccurrence(chore, now)
-    // Don't judge the chore against a scheduled occurrence that happened before it even existed.
-    if (chore.created_at && deadline < new Date(chore.created_at)) return `rgb(${GREEN.join(', ')})`
     if (doneForCurrentCycle(chore, now)) return `rgb(${GREEN.join(', ')})`
-    overdueBy = (now - deadline) / (1000 * 60 * 60 * 24)
-  } else {
-    const baseline = chore.last_done_at || chore.created_at
-    if (!baseline) return null
-    const daysSince = (now - new Date(baseline)) / (1000 * 60 * 60 * 24)
-    overdueBy = daysSince - days
-    if (overdueBy <= 0) return `rgb(${GREEN.join(', ')})`
+    // relevantDueDate is already anchored to last_done_at/created_at, so it can never land
+    // before the chore existed - no separate "fresh chore" guard needed here.
+    return colorForDueDate(relevantDueDate(chore, now), now, dark)
   }
 
-  const yellowAt = Math.ceil(days / 6)
-  const redAt = yellowAt * 2
+  const baseline = chore.last_done_at || chore.created_at
+  if (!baseline) return null
+  const virtualDueDate = new Date(new Date(baseline).getTime() + intervalDays(chore) * 24 * 60 * 60 * 1000)
+  return colorForDueDate(virtualDueDate, now, dark)
+}
 
-  if (overdueBy >= redAt) return `rgb(${RED.join(', ')})`
-  if (overdueBy <= yellowAt) return lerpColor(GREEN, YELLOW, overdueBy / yellowAt)
-  return lerpColor(YELLOW, RED, (overdueBy - yellowAt) / (redAt - yellowAt))
+// Same red/yellow/green/blue treatment for one-off tasks with a deadline. Done tasks and tasks
+// with no deadline get no color.
+export function taskColor(task, dark) {
+  if (task.done || !task.deadline) return null
+  return colorForDueDate(new Date(task.deadline), new Date(), dark)
 }
