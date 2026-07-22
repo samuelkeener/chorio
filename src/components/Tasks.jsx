@@ -76,6 +76,7 @@ export default function Tasks({ user, theme = 'light', title = 'Tasks', projectI
   const [newTask, setNewTask] = useState('')
   const [assignTo, setAssignTo] = useState('Sam')
   const [newCategory, setNewCategory] = useState('')
+  const [newDeadline, setNewDeadline] = useState('')
   const [filter, setFilter] = useState('mine')
   const [showDone, setShowDone] = useState(true)
   const [activeCategories, setActiveCategories] = useState(new Set())
@@ -107,9 +108,16 @@ export default function Tasks({ user, theme = 'light', title = 'Tasks', projectI
 
   async function addTask() {
     if (!newTask.trim()) return
-    await supabase.from('tasks').insert({ name: newTask, assigned_to: assignTo, category: newCategory.trim() || null, project_id: projectId })
+    await supabase.from('tasks').insert({
+      name: newTask,
+      assigned_to: assignTo,
+      category: newCategory.trim() || null,
+      deadline: newDeadline ? new Date(newDeadline).toISOString() : null,
+      project_id: projectId,
+    })
     setNewTask('')
     setNewCategory('')
+    setNewDeadline('')
     fetchTasks()
   }
 
@@ -306,6 +314,13 @@ export default function Tasks({ user, theme = 'light', title = 'Tasks', projectI
           onKeyDown={e => e.key === 'Enter' && addTask()}
           placeholder="Category..."
           list="category-options"
+        />
+        <input
+          type="datetime-local"
+          className="new-deadline-input"
+          value={newDeadline}
+          onChange={e => setNewDeadline(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && addTask()}
         />
         <button onClick={addTask}>Add</button>
       </div>
