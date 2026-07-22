@@ -5,6 +5,8 @@ export default function Shopping({ user }) {
   const [items, setItems] = useState([])
   const [newItem, setNewItem] = useState('')
   const [category, setCategory] = useState('Produce')
+  const [editingNoteId, setEditingNoteId] = useState(null)
+  const [noteDraft, setNoteDraft] = useState('')
 
   useEffect(() => { fetchItems() }, [])
 
@@ -32,6 +34,19 @@ export default function Shopping({ user }) {
 
   async function clearChecked() {
     await supabase.from('shop_items').delete().eq('checked', true)
+    fetchItems()
+  }
+
+  function startEditingNote(item) {
+    setEditingNoteId(item.id)
+    setNoteDraft(item.note || '')
+  }
+
+  async function saveNote(item) {
+    setEditingNoteId(null)
+    const trimmed = noteDraft.trim()
+    if (trimmed === (item.note || '')) return
+    await supabase.from('shop_items').update({ note: trimmed || null }).eq('id', item.id)
     fetchItems()
   }
 
@@ -65,7 +80,27 @@ export default function Shopping({ user }) {
           {items.filter(i => i.category === cat).map(item => (
             <div key={item.id} className="shop-item">
               <input type="checkbox" checked={item.checked} onChange={() => toggleItem(item)} />
-              <span className={item.checked ? 'shop-label checked' : 'shop-label'}>{item.name}</span>
+              <div className="shop-info">
+                <span className={item.checked ? 'shop-label checked' : 'shop-label'}>{item.name}</span>
+                {editingNoteId === item.id ? (
+                  <input
+                    className="task-note-input"
+                    value={noteDraft}
+                    autoFocus
+                    placeholder="Note..."
+                    onChange={e => setNoteDraft(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') saveNote(item)
+                      if (e.key === 'Escape') setEditingNoteId(null)
+                    }}
+                    onBlur={() => saveNote(item)}
+                  />
+                ) : (
+                  <div className="task-note editable-name" onClick={() => startEditingNote(item)}>
+                    {item.note || '+ Note'}
+                  </div>
+                )}
+              </div>
               <span className="shop-cat">by {item.added_by}</span>
               <button className="delete-btn" onClick={() => deleteItem(item.id)}>✕</button>
             </div>
