@@ -21,6 +21,7 @@ function blankDeadlineDraft(chore) {
     weekday: chore?.deadline_weekday ?? 0,
     dayOfMonth: chore?.deadline_day_of_month ?? 1,
     anchor: toDatetimeLocal(chore?.deadline_anchor),
+    showDaysBefore: String(chore?.show_days_before ?? 14),
   }
 }
 
@@ -67,6 +68,7 @@ export default function Chores({ user, theme = 'light' }) {
       deadline_weekday: useDeadline && frequency === 'Weekly' ? deadlineDraft.weekday : null,
       deadline_day_of_month: useDeadline && frequency === 'Monthly' ? deadlineDraft.dayOfMonth : null,
       deadline_anchor: useDeadline && frequency === 'Custom' ? new Date(deadlineDraft.anchor).toISOString() : null,
+      show_days_before: useDeadline ? (parseInt(deadlineDraft.showDaysBefore, 10) || 0) : 14,
     })
     setNewChore('')
     setDeadlineEnabled(false)
@@ -138,6 +140,7 @@ export default function Chores({ user, theme = 'light' }) {
       deadline_weekday: chore.frequency === 'Weekly' ? editDraft.weekday : null,
       deadline_day_of_month: chore.frequency === 'Monthly' ? editDraft.dayOfMonth : null,
       deadline_anchor: chore.frequency === 'Custom' ? new Date(editDraft.anchor).toISOString() : null,
+      show_days_before: parseInt(editDraft.showDaysBefore, 10) || 0,
     }).eq('id', chore.id)
     setEditingDeadlineId(null)
     fetchChores()
@@ -149,6 +152,7 @@ export default function Chores({ user, theme = 'light' }) {
       deadline_weekday: null,
       deadline_day_of_month: null,
       deadline_anchor: null,
+      show_days_before: 14,
     }).eq('id', chore.id)
     setEditingDeadlineId(null)
     fetchChores()
@@ -224,6 +228,19 @@ export default function Chores({ user, theme = 'light' }) {
               value={deadlineDraft.anchor}
               onChange={e => setDeadlineDraft({ ...deadlineDraft, anchor: e.target.value })}
             />
+          )}
+          {deadlineEnabled && (
+            <>
+              <span className="interval-label">Show</span>
+              <input
+                className="interval-count"
+                type="number"
+                min="0"
+                value={deadlineDraft.showDaysBefore}
+                onChange={e => setDeadlineDraft({ ...deadlineDraft, showDaysBefore: e.target.value })}
+              />
+              <span className="interval-label">day(s) before, on Tasks tab</span>
+            </>
           )}
         </div>
       )}
@@ -330,6 +347,15 @@ export default function Chores({ user, theme = 'light' }) {
                       {chore.frequency === 'Custom' && (
                         <input type="datetime-local" value={editDraft.anchor} onChange={e => setEditDraft({ ...editDraft, anchor: e.target.value })} />
                       )}
+                      <span className="interval-label">Show</span>
+                      <input
+                        className="interval-count"
+                        type="number"
+                        min="0"
+                        value={editDraft.showDaysBefore}
+                        onChange={e => setEditDraft({ ...editDraft, showDaysBefore: e.target.value })}
+                      />
+                      <span className="interval-label">day(s) before</span>
                       <button onClick={() => saveDeadline(chore)}>Save</button>
                       {hasDeadline(chore) && <button onClick={() => clearDeadline(chore)}>Clear</button>}
                       <button onClick={() => setEditingDeadlineId(null)}>Cancel</button>

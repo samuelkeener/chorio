@@ -241,16 +241,18 @@ export function relevantDueDate(chore, now) {
 }
 
 // Deadline chores don't clutter the Tasks tab until they're actually relevant - hidden there
-// (still fully visible/actionable on the Chores tab) until their next occurrence is within two
-// weeks out. Overdue chores are always within two weeks by definition, so this never hides one
-// that needs attention. Ambient chores (no manual deadline) have no due date to judge, so they're
-// never hidden by this rule.
+// (still fully visible/actionable on the Chores tab) until midnight at the start of the day
+// `show_days_before` days before the deadline (defaults to 14, editable per chore). E.g.
+// show_days_before=1 means it appears at midnight the day before it's due. Overdue chores are
+// always past that point by definition, so this never hides one that needs attention. Ambient
+// chores (no manual deadline) have no due date to judge, so they're never hidden by this rule.
 export function isTooFarOut(chore, now) {
   if (!hasDeadline(chore)) return false
   const due = relevantDueDate(chore, now)
   if (!due) return false
-  const daysUntilDue = (due - now) / (1000 * 60 * 60 * 24)
-  return daysUntilDue > 14
+  const showFrom = new Date(due.getFullYear(), due.getMonth(), due.getDate())
+  showFrom.setDate(showFrom.getDate() - (chore.show_days_before ?? 14))
+  return now < showFrom
 }
 
 // Light-mode tints are soft pastels meant to sit on a white page; dark-mode uses deeper, more
